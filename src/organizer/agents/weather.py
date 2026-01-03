@@ -16,14 +16,22 @@ def _extract_location(text: str) -> Optional[str]:
 
 
 class WeatherAgent(Agent):
-    def __init__(self, tool: Tool, name: str = "weather"):
+    def __init__(self, tool: Tool, name: str = "weather", city_normalizer: Tool | None = None):
         super().__init__(name=name)
         self._tool = tool
+        self._city_normalizer = city_normalizer
 
     def handle(self, message: Message) -> Message:
-        location = _extract_location(message.content) or "Warszawa"
-        date = "tomorrow"  # na razie stałe; w przyszłości zrobimy parser dat
+        raw_location = _extract_location(message.content) or "Warszawa"
 
+        # Jeśli mamy normalizator (np. OpenAI) → zamień na mianownik
+        if self._city_normalizer is not None:
+            norm = self._city_normalizer(text=raw_location)
+            location = norm.get("nominative", raw_location)
+        else:
+            location = raw_location
+
+        date = "tomorrow"
         data = self._tool(location=location, date=date)
 
         content = (

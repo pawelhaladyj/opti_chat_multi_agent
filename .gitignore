@@ -43,6 +43,7 @@ hypothesis/
 
 # ===== Logs =====
 *.log
+history/history_*.txt
 
 # ===== OS =====
 .DS_Store
