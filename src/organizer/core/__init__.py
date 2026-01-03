@@ -4,6 +4,7 @@ from .agent import Agent
 from .registry import AgentRegistry
 from .orchestrator import Orchestrator, RoutingRule
 from .preferences import Preferences
+from .preferences_store import PreferencesStore
 
 __all__ = [
     "say_hello",
@@ -14,4 +15,5 @@ __all__ = [
     "Orchestrator",
     "RoutingRule",
     "Preferences",
+    "PreferencesStore",
 ]
