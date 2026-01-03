@@ -9,7 +9,8 @@ from .errors import ToolError
 from .trace import TraceEvent
 from .tool_runner import call_tool_with_trace
 from .retry import RetryPolicy, RetryExceededError, call_tool_with_retry
-
+from .task import Task
+from .fixplan import FixPlan
 
 __all__ = [
     "say_hello",
@@ -27,5 +28,6 @@ __all__ = [
     "RetryPolicy",
     "RetryExceededError",
     "call_tool_with_retry",
-
+    "Task",
+    "FixPlan",
 ]
