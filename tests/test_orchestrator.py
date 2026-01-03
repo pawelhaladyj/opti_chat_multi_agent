@@ -2,12 +2,13 @@ import pytest
 
 from organizer.core import AgentRegistry, Orchestrator, RoutingRule
 from organizer.agents import WeatherAgent, StayAgent
+from organizer.tools import FakeWeatherAPI, FakeHousingAPI
 
 
 def make_orchestrator() -> Orchestrator:
     registry = AgentRegistry()
-    registry.register(WeatherAgent(name="weather"))
-    registry.register(StayAgent(name="stays"))
+    registry.register(WeatherAgent(tool=FakeWeatherAPI(), name="weather"))
+    registry.register(StayAgent(tool=FakeHousingAPI(), name="stays"))
 
     rules = [
         RoutingRule(keyword="pogoda", agent_name="weather"),
