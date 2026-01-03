@@ -8,6 +8,8 @@ from .preferences_store import PreferencesStore
 from .errors import ToolError
 from .trace import TraceEvent
 from .tool_runner import call_tool_with_trace
+from .retry import RetryPolicy, RetryExceededError, call_tool_with_retry
+
 
 __all__ = [
     "say_hello",
@@ -22,4 +24,8 @@ __all__ = [
     "ToolError",
     "TraceEvent",
     "call_tool_with_trace",
+    "RetryPolicy",
+    "RetryExceededError",
+    "call_tool_with_retry",
+
 ]
