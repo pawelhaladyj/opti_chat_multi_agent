@@ -1,0 +1,64 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ===== Virtual environments =====
+.venv/
+venv/
+ENV/
+env/
+.ENV/
+.python-version
+
+# ===== Environment variables / secrets =====
+.env
+.env.*
+!.env.example
+
+# ===== Build / packaging =====
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+*.whl
+
+# ===== Installer / tooling caches =====
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+hypothesis/
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+
+# ===== Logs =====
+*.log
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== IDEs =====
+.vscode/
+.idea/
+*.iml
+
+# ===== Type check / lint =====
+.pyre/
+.pytype/
+
+# ===== Local app state =====
+instance/
+*.sqlite3
+*.db
