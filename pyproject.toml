@@ -1,0 +1,11 @@
+[project]
+name = "organizer"
+version = "0.0.0"
+description = "Incremental multi-agent organizer (weather/events/stays) built with tests."
+requires-python = ">=3.14"
+readme = "README.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
