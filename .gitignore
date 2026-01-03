@@ -10,6 +10,7 @@ ENV/
 env/
 .ENV/
 .python-version
+new_design.txt
 
 # ===== Environment variables / secrets =====
 .env

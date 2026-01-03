@@ -24,13 +24,11 @@ def _make_tool_error(
     stid = _stack_trace_id(tb)
 
     # Bez zależności od konkretnego HTTP klienta:
-    # jeśli kiedyś dodasz httpx/requests wyjątki — rozszerzymy mapowanie.
     code = "EXCEPTION"
     err_type = "EXCEPTION"
     message = str(exc).strip() or exc.__class__.__name__
 
     raw_response = None
-    # Tu w przyszłości łatwo dołożysz: http status, response body itp.
 
     return ToolError(
         code=code,
@@ -40,6 +38,7 @@ def _make_tool_error(
         request_params=request_params,
         raw_response=raw_response,
         stack_trace_id=stid,
+        stack_trace=tb,
     )
 
 
@@ -53,8 +52,8 @@ def call_tool_with_trace(
 ) -> tuple[Any | None, TraceEvent]:
     """
     Wywołuje narzędzie i ZAWSZE zwraca TraceEvent.
-    - w sukcesie: (result, TraceEvent(outcome="success", error=None))
-    - w błędzie:  (None, TraceEvent(outcome="error", error=ToolError))
+    - sukces: (result, TraceEvent(outcome="success", error=None))
+    - błąd:   (None,   TraceEvent(outcome="error",   error=ToolError))
     """
     cid = correlation_id or uuid.uuid4().hex
 

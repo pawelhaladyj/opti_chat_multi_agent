@@ -16,6 +16,7 @@ class ToolError:
     request_params: parametry wywołania tool-a
     raw_response: surowa odpowiedź (opcjonalnie; np. body błędu HTTP)
     stack_trace_id: identyfikator stack trace (żeby log był krótki, a trace dało się skorelować)
+    stack_trace: pełny stack trace (opcjonalnie; do diagnozy / LLM)
     """
     code: str
     type: str
@@ -24,3 +25,4 @@ class ToolError:
     request_params: Mapping[str, Any]
     raw_response: str | None
     stack_trace_id: str
+    stack_trace: str | None = None

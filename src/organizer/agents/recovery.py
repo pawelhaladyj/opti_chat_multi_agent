@@ -7,47 +7,51 @@ from typing import Any, Mapping
 from organizer.core.errors import ToolError
 from organizer.core.fixplan import FixPlan
 from organizer.core.task import Task
+from organizer.tools.real.openai_recovery import OpenAIRecoveryTool
 
 
 @dataclass(frozen=True)
 class RecoveryAgent:
     """
-    RecoveryAgent v1:
-    - bez LLM
-    - heurystyki oparte o typ błędu + kontekst wywołania
-    - nie "zna domeny" (miast), ale naprawia formaty i parametry requestów
+    RecoveryAgent v2:
+
+    1) Najpierw heurystyki (v1) — szybkie, przewidywalne, bez LLM.
+    2) Jeśli heurystyki nie mają sensownej poprawki (fail) albo idą w ogólny fallback,
+       wtedy (opcjonalnie) odpalamy LLM-diagnosis przez OpenAIRecoveryTool.
     """
     name: str = "recovery"
+    llm_recovery_tool: OpenAIRecoveryTool | None = None
 
     def propose_fix(self, *, error: ToolError, last_task: Task, last_inputs: Mapping[str, Any]) -> FixPlan:
         # 1) Typowe przypadki "no results" (np. geocoding)
         if self._looks_like_no_results(error):
             patch: dict[str, Any] = {}
 
-            # często pomaga:
-            # - language="pl" (jeśli user pisze po polsku)
-            # - count zwiększyć
             if "language" in last_inputs and last_inputs.get("language") != "pl":
                 patch["language"] = "pl"
 
             if "count" in last_inputs:
-                patch["count"] = max(int(last_inputs.get("count") or 1), 5)
+                try:
+                    patch["count"] = max(int(last_inputs.get("count") or 1), 5)
+                except Exception:
+                    patch["count"] = 5
 
-            # jeśli nic nie umiemy poprawić parametrami, zasugeruj fallback tool
             if patch:
                 return FixPlan(
                     action="retry_with_params",
                     reason="Tool returned no results; try broader query (language/count).",
                     params_patch=patch,
                 )
-            return FixPlan(
+
+            plan = FixPlan(
                 action="fallback_tool",
                 reason="Tool returned no results; try fallback geocoder provider.",
                 fallback_tool_name="fallback_geocoder",
                 params_patch=dict(last_inputs),
             )
+            return self._maybe_llm(plan=plan, error=error, last_task=last_task, last_inputs=last_inputs)
 
-        # 2) HTTP 400: często format parametrów (np. date)
+        # 2) Błędy formatu (np. data)
         if error.code == "400" or self._looks_like_invalid_date(error):
             patch = self._fix_date_format_patch(last_inputs)
             if patch:
@@ -65,12 +69,34 @@ class RecoveryAgent:
                 params_patch=None,
             )
 
-        # 4) Domyślnie: nie wiemy
-        return FixPlan(
+        # 4) Domyślnie: heurystyki nie wiedzą -> LLM (jeśli włączone)
+        plan = FixPlan(
             action="fail",
-            reason="No safe heuristic fix found for this error.",
+            reason="No heuristic fix available for this tool error.",
             params_patch=None,
         )
+        return self._maybe_llm(plan=plan, error=error, last_task=last_task, last_inputs=last_inputs)
+
+    def _maybe_llm(self, *, plan: FixPlan, error: ToolError, last_task: Task, last_inputs: Mapping[str, Any]) -> FixPlan:
+        if plan.action not in {"fail", "fallback_tool"}:
+            return plan
+        if self.llm_recovery_tool is None:
+            return plan
+
+        try:
+            llm_plan = self.llm_recovery_tool.propose_fix(
+                error=error,
+                last_task=last_task,
+                last_inputs=last_inputs,
+            )
+        except Exception:
+            # Recovery nie może wysadzić głównego flow
+            return plan
+
+        if llm_plan is None or llm_plan.action == "fail":
+            return plan
+
+        return llm_plan
 
     def _looks_like_no_results(self, error: ToolError) -> bool:
         msg = (error.message or "").lower()
@@ -81,10 +107,6 @@ class RecoveryAgent:
         return ("invalid date" in msg) or ("date format" in msg) or ("fromisoformat" in msg)
 
     def _fix_date_format_patch(self, inputs: Mapping[str, Any]) -> dict[str, Any]:
-        """
-        Jeśli w inputs jest date i wygląda podejrzanie, spróbuj ją sprowadzić do YYYY-MM-DD.
-        Nie zgadujemy daty — tylko normalizujemy format, jeśli to możliwe.
-        """
         if "date" not in inputs:
             return {}
 
@@ -92,18 +114,14 @@ class RecoveryAgent:
         if not raw:
             return {}
 
-        # jeżeli już jest YYYY-MM-DD -> nic
         if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
             return {}
 
-        # przykłady napraw:
-        # 2026/01/03 -> 2026-01-03
         m = re.fullmatch(r"(\d{4})[\/\.](\d{2})[\/\.](\d{2})", raw)
         if m:
             y, mo, d = m.group(1), m.group(2), m.group(3)
             return {"date": f"{y}-{mo}-{d}"}
 
-        # "03-01-2026" (DD-MM-YYYY) -> YYYY-MM-DD
         m = re.fullmatch(r"(\d{2})-(\d{2})-(\d{4})", raw)
         if m:
             d, mo, y = m.group(1), m.group(2), m.group(3)
