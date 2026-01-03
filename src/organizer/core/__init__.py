@@ -3,6 +3,7 @@ from .types import Message, ToolResult
 from .agent import Agent
 from .registry import AgentRegistry
 from .orchestrator import Orchestrator, RoutingRule
+from .preferences import Preferences
 
 __all__ = [
     "say_hello",
@@ -12,4 +13,5 @@ __all__ = [
     "AgentRegistry",
     "Orchestrator",
     "RoutingRule",
+    "Preferences",
 ]
