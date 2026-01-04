@@ -1,52 +1,114 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from datetime import datetime, timezone
+from typing import Iterable, List, Tuple
+import uuid
 
 from organizer.core.registry import AgentRegistry
 from organizer.core.types import Message
 from organizer.core.agent import Agent
+from organizer.core.trace import TraceEvent
 
 
 @dataclass(frozen=True)
 class RoutingRule:
-    """
-    Prosta reguła routingu: jeśli keyword występuje w treści,
-    to kierujemy wiadomość do agenta o danej nazwie.
-    """
     keyword: str
     agent_name: str
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 class Orchestrator:
     """
-    Dyspozytor: bierze wiadomość usera, wybiera agenta,
-    zbiera odpowiedź i zapisuje historię rozmowy.
+    Orchestrator (new_design)
+
+    Kompatybilność:
+    - zachowuje `handle(message: Message)` oraz `history` (wymagane przez testy)
+    - dodaje `team_conversation` (TraceEvent) jako fundament iteracji 13 kontraktu MAS
     """
 
     def __init__(self, registry: AgentRegistry, rules: Iterable[RoutingRule]):
         self._registry = registry
         self._rules = list(rules)
-        self._history: list[Message] = []
+
+        # Historia rozmowy user<->agent (to, co testy nazywają orch.history)
+        self._history: List[Message] = []
+
+        # Wewnętrzny trace zespołu (team_conversation)
+        self._team_conversation: List[TraceEvent] = []
 
     @property
-    def history(self) -> list[Message]:
-        # Zwracamy kopię, żeby nikt z zewnątrz nie psuł historii
-        return list(self._history)
+    def history(self) -> Tuple[Message, ...]:
+        return tuple(self._history)
 
-    def handle_user_text(self, text: str) -> Message:
-        user_msg = Message(sender="user", content=text)
-        self._history.append(user_msg)
+    @property
+    def team_conversation(self) -> Tuple[TraceEvent, ...]:
+        return tuple(self._team_conversation)
 
-        agent = self._pick_agent(user_msg)
-        agent_reply = agent.handle(user_msg)
+    def reset(self) -> None:
+        """
+        Resetuje stan sesji (historia + trace).
+        """
+        self._history.clear()
+        self._team_conversation.clear()
 
-        self._history.append(agent_reply)
-        return agent_reply
+    def handle(self, message: Message) -> Message:
+        """
+        Single-step obsługa wiadomości.
+        Zapisuje:
+        - orch.history: user msg, agent reply
+        - orch.team_conversation: route, respond
+        """
+        cid = f"CID-{uuid.uuid4().hex[:12]}"
+
+        # historia: user
+        self._history.append(message)
+
+        agent = self._pick_agent(message)
+
+        # trace: routing
+        self._team_conversation.append(
+            TraceEvent(
+                actor="orchestrator",
+                action="route",
+                target=getattr(agent, "name", agent.__class__.__name__),
+                params={"text": message.content},
+                outcome="ok",
+                error=None,
+                timestamp=_now_iso(),
+                correlation_id=cid,
+            )
+        )
+
+        reply = agent.handle(message)
+
+        # historia: agent
+        self._history.append(reply)
+
+        # trace: odpowiedź agenta
+        self._team_conversation.append(
+            TraceEvent(
+                actor=getattr(agent, "name", agent.__class__.__name__),
+                action="respond",
+                target="user",
+                params={"content": reply.content},
+                outcome="ok",
+                error=None,
+                timestamp=_now_iso(),
+                correlation_id=cid,
+            )
+        )
+
+        return reply
+
+    def handle_user_text(self, user_text: str) -> Message:
+        return self.handle(Message(sender="user", content=user_text))
 
     def _pick_agent(self, message: Message) -> Agent:
-        content = message.content.lower()
-
+        content = (message.content or "").lower()
         for rule in self._rules:
             if rule.keyword.lower() in content:
                 return self._registry.get(rule.agent_name)

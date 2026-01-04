@@ -1,11 +1,13 @@
 from dotenv import load_dotenv
+from datetime import datetime
+from pathlib import Path
+
 from organizer.core.types import Message
 from organizer.core import AgentRegistry, Orchestrator, RoutingRule
 from organizer.agents import WeatherAgent, StayAgent, PlannerAgent
 from organizer.tools.fake_apis import FakeWeatherAPI, FakeEventsAPI, FakeHousingAPI
-from organizer.core.preferences import Preferences
-from organizer.tools.real.open_meteo import OpenMeteoWeatherTool
 from organizer.core.history_logger import HistoryLogger
+from organizer.core.trace_logger import write_trace_jsonl
 
 
 def build_orchestrator(*, use_llm: bool = False, use_real_apis: bool = False):
@@ -14,45 +16,26 @@ def build_orchestrator(*, use_llm: bool = False, use_real_apis: bool = False):
     # 1) Wybór narzędzi (FAKE vs REAL)
     if use_real_apis:
         from organizer.tools.real.open_meteo import OpenMeteoWeatherTool
-        from organizer.tools.real.openai_city_normalizer import OpenAICityNormalizerTool
-
         weather_tool = OpenMeteoWeatherTool()
-        city_normalizer = OpenAICityNormalizerTool()
     else:
         weather_tool = FakeWeatherAPI()
-        city_normalizer = None
 
-    events_tool = FakeEventsAPI()   # na razie zawsze fake (stabilne)
-    housing_tool = FakeHousingAPI() # na razie zawsze fake (stabilne)
+    events_tool = FakeEventsAPI()
+    housing_tool = FakeHousingAPI()
 
-    # 2) Rejestracja agentów z wstrzykniętymi toolami
-    registry.register(
-        WeatherAgent(
-            tool=weather_tool,
-            name="weather",
-            city_normalizer=city_normalizer,
-        )
-    )
+    # 2) Agenci
+    registry.register(WeatherAgent(tool=weather_tool))
+    registry.register(StayAgent(tool=housing_tool))
 
-    registry.register(
-        StayAgent(tool=housing_tool, name="stays")
-    )
-
+    # FIX: PlannerAgent wymaga keyword-only: events_tool ORAZ weather_tool
     registry.register(
         PlannerAgent(
-            weather_tool=weather_tool,   # <-- ważne: planner używa tego samego źródła pogody
             events_tool=events_tool,
-            preferences=Preferences(),
-            name="planner",
+            weather_tool=weather_tool,
         )
     )
 
-    # 3) Opcjonalny agent LLM
-    if use_llm:
-        from organizer.agents.llm import OpenAIAgent
-        registry.register(OpenAIAgent())
-
-    # 4) Routing
+    # 3) Routing rules
     rules = [
         RoutingRule("pogoda", "weather"),
         RoutingRule("nocleg", "stays"),
@@ -60,12 +43,7 @@ def build_orchestrator(*, use_llm: bool = False, use_real_apis: bool = False):
         RoutingRule("zaplanuj", "planner"),
     ]
 
-    if use_llm:
-        rules.append(RoutingRule("dlaczego", "llm"))
-        rules.append(RoutingRule("opowiedz", "llm"))
-
     return Orchestrator(registry, rules)
-
 
 
 def run_cli():
@@ -78,21 +56,23 @@ def run_cli():
     logger = HistoryLogger.create_default()
     print(f"(log) zapisuję historię do: {logger.file_path}\n")
 
+    trace_path = Path(logger.file_path).with_name(
+        f"trace_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+    )
+
     while True:
         user_input = input("> ").strip()
         if user_input.lower() in {"exit", "quit"}:
             break
 
         try:
-            # 1) zapis usera
             user_msg = Message(sender="user", content=user_input)
             logger.append(user_msg)
 
-            # 2) normalne przetworzenie przez orchestrator
             reply = orch.handle_user_text(user_input)
-
-            # 3) zapis odpowiedzi agenta
             logger.append(reply)
+
+            write_trace_jsonl(orch.team_conversation, trace_path)
 
             print(f"\n[{reply.sender}] {reply.content}\n")
 
