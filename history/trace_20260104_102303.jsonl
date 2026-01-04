@@ -1,0 +1,3 @@
+{"actor": "orchestrator", "action": "route", "target": "weather", "params": {"text": "pogoda w Warszawie"}, "outcome": "ok", "error": null, "timestamp": "2026-01-04T09:23:10.668700+00:00", "correlation_id": "CID-ee286f27a504"}
+{"actor": "orchestrator", "action": "route", "target": "weather", "params": {"text": "pogoda w Warszawa"}, "outcome": "ok", "error": null, "timestamp": "2026-01-04T09:23:18.222111+00:00", "correlation_id": "CID-7d6c2dd43c69"}
+{"actor": "weather", "action": "respond", "target": "user", "params": {"content": "Pogoda dla Slavic Village, United States (2026-01-05): pogodnie, 2°C, opady: 2%."}, "outcome": "ok", "error": null, "timestamp": "2026-01-04T09:23:19.254343+00:00", "correlation_id": "CID-7d6c2dd43c69"}
