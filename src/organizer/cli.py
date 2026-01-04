@@ -4,7 +4,7 @@ from pathlib import Path
 
 from organizer.core.types import Message
 from organizer.core import AgentRegistry, Orchestrator, RoutingRule
-from organizer.agents import WeatherAgent, StayAgent, PlannerAgent
+from organizer.agents import WeatherAgent, StayAgent, PlannerAgent, CoordinatorAgent
 from organizer.tools.fake_apis import FakeWeatherAPI, FakeEventsAPI, FakeHousingAPI
 from organizer.core.history_logger import HistoryLogger
 from organizer.core.trace_logger import write_trace_jsonl
@@ -23,11 +23,11 @@ def build_orchestrator(*, use_llm: bool = False, use_real_apis: bool = False):
     events_tool = FakeEventsAPI()
     housing_tool = FakeHousingAPI()
 
-    # 2) Agenci
+    # 2) Agenci (workers)
     registry.register(WeatherAgent(tool=weather_tool))
     registry.register(StayAgent(tool=housing_tool))
 
-    # FIX: PlannerAgent wymaga keyword-only: events_tool ORAZ weather_tool
+    # PlannerAgent wymaga keyword-only: events_tool ORAZ weather_tool
     registry.register(
         PlannerAgent(
             events_tool=events_tool,
@@ -35,7 +35,12 @@ def build_orchestrator(*, use_llm: bool = False, use_real_apis: bool = False):
         )
     )
 
-    # 3) Routing rules
+    # 2.1) Coordinator (jedyny decydent routingu)
+    # Import lokalny, żeby nie prowokować cykli importów przy starcie narzędzi/integracji.
+    from organizer.agents.coordinator import CoordinatorAgent
+    registry.register(CoordinatorAgent(name="coordinator"))
+
+    # 3) Routing rules (LEGACY / fallback only)
     rules = [
         RoutingRule("pogoda", "weather"),
         RoutingRule("nocleg", "stays"),
@@ -43,7 +48,12 @@ def build_orchestrator(*, use_llm: bool = False, use_real_apis: bool = False):
         RoutingRule("zaplanuj", "planner"),
     ]
 
-    return Orchestrator(registry, rules)
+    # Od iteracji 16: routing robi CoordinatorAgent (nie Orchestrator)
+    return Orchestrator(
+        registry,
+        rules,  # legacy fallback
+        coordinator_name="coordinator",
+    )
 
 
 def run_cli():
